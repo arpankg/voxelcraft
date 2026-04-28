@@ -1216,5 +1216,16 @@ Holding: ${BLOCKS[HOTBAR[activeSlot]].name}`;
 main().catch((err) => {
   console.error(err);
   const ld = document.getElementById('loading-screen');
-  ld.innerHTML = `<div class="start-card"><h2 class="logo small">ERROR</h2><p class="hint">${err.message}</p></div>`;
+  ld.replaceChildren();
+  const card = document.createElement('div');
+  card.className = 'start-card';
+  const h = document.createElement('h2');
+  h.className = 'logo small';
+  h.textContent = 'ERROR';
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.textContent = err && err.message ? err.message : 'Unknown error';
+  card.appendChild(h);
+  card.appendChild(p);
+  ld.appendChild(card);
 });

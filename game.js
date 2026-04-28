@@ -52,6 +52,83 @@ const BLOCKS = {
 // Hotbar block list
 const HOTBAR = [B.GRASS, B.DIRT, B.STONE, B.WOOD, B.PLANKS, B.LEAVES, B.SAND, B.BRICK, B.GLASS];
 
+// ---------- Math difficulty by block tier ----------
+// Each tier defines: time limit (s), question generator, XP reward.
+const MATH_TIERS = {
+  easy:   { time: 6.0, xp: 5  },
+  med:    { time: 5.0, xp: 10 },
+  hard:   { time: 4.5, xp: 18 },
+  pro:    { time: 4.0, xp: 28 },
+};
+
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+// Question generators per category. Each returns { text, answer }.
+const Q_GEN = {
+  addSmall: () => {
+    const a = randInt(1, 9), b = randInt(1, 9);
+    return { text: `${a} + ${b}`, answer: a + b };
+  },
+  addMed: () => {
+    const a = randInt(10, 49), b = randInt(2, 39);
+    return { text: `${a} + ${b}`, answer: a + b };
+  },
+  subSmall: () => {
+    const a = randInt(5, 19), b = randInt(1, a);
+    return { text: `${a} − ${b}`, answer: a - b };
+  },
+  subMed: () => {
+    const a = randInt(20, 99), b = randInt(2, a - 1);
+    return { text: `${a} − ${b}`, answer: a - b };
+  },
+  multSmall: () => {
+    const a = randInt(2, 9), b = randInt(2, 9);
+    return { text: `${a} × ${b}`, answer: a * b };
+  },
+  multMed: () => {
+    const a = randInt(2, 12), b = randInt(2, 12);
+    return { text: `${a} × ${b}`, answer: a * b };
+  },
+  divSmall: () => {
+    // Always whole-number division
+    const b = randInt(2, 9);
+    const ans = randInt(2, 9);
+    return { text: `${b * ans} ÷ ${b}`, answer: ans };
+  },
+  divMed: () => {
+    const b = randInt(2, 12);
+    const ans = randInt(2, 12);
+    return { text: `${b * ans} ÷ ${b}`, answer: ans };
+  },
+  // mixed picks any one
+  mixedEasy: () => pickFrom([Q_GEN.addSmall, Q_GEN.subSmall])(),
+  mixedMed:  () => pickFrom([Q_GEN.addMed, Q_GEN.subMed, Q_GEN.multSmall])(),
+  mixedHard: () => pickFrom([Q_GEN.subMed, Q_GEN.multMed, Q_GEN.divSmall])(),
+  mixedPro:  () => pickFrom([Q_GEN.multMed, Q_GEN.divMed])(),
+};
+function pickFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// Block-id → difficulty descriptor for mining
+const MINING_DIFFICULTY = {
+  [B.LEAVES]: { tier: 'easy', gen: Q_GEN.addSmall },
+  [B.SAND]:   { tier: 'easy', gen: Q_GEN.addSmall },
+  [B.SNOW]:   { tier: 'easy', gen: Q_GEN.mixedEasy },
+  [B.GRASS]:  { tier: 'med',  gen: Q_GEN.mixedEasy },
+  [B.DIRT]:   { tier: 'med',  gen: Q_GEN.mixedEasy },
+  [B.WOOD]:   { tier: 'med',  gen: Q_GEN.mixedMed },
+  [B.PLANKS]: { tier: 'med',  gen: Q_GEN.mixedMed },
+  [B.GLASS]:  { tier: 'hard', gen: Q_GEN.multSmall },
+  [B.BRICK]:  { tier: 'hard', gen: Q_GEN.multSmall },
+  [B.STONE]:  { tier: 'hard', gen: Q_GEN.mixedHard },
+  [B.COBBLE]: { tier: 'hard', gen: Q_GEN.mixedHard },
+};
+function getMiningChallenge(blockId) {
+  const d = MINING_DIFFICULTY[blockId] || { tier: 'med', gen: Q_GEN.addMed };
+  const tier = MATH_TIERS[d.tier];
+  const q = d.gen();
+  return { tier: d.tier, time: tier.time, xp: tier.xp, ...q };
+}
+
 // ---------- Procedural pixel-art texture atlas ----------
 // 16x16 tiles, 4x4 grid = 64x64 atlas. Tile index 0..15.
 const TILE = 16;
@@ -964,16 +1041,14 @@ async function main() {
 
   document.addEventListener('pointerlockchange', () => {
     pointerLocked = (document.pointerLockElement === renderer.domElement);
-    if (!pointerLocked && !startScreen.classList.contains('hidden') === false) {
-      // if we've started the game and lock dropped, show pause
-      if (startScreen.classList.contains('hidden')) {
-        paused = true;
-        pauseScreen.classList.remove('hidden');
-      }
+    // Only show pause if lock dropped AND game has started AND no math prompt is up
+    if (!pointerLocked && startScreen.classList.contains('hidden') && !mathPrompt.active) {
+      paused = true;
+      pauseScreen.classList.remove('hidden');
     }
   });
 
-  // Click anywhere on canvas during play to re-grab pointer
+  // Click anywhere on canvas during play to re-grab pointer / trigger actions
   renderer.domElement.addEventListener('mousedown', (e) => {
     if (startScreen.classList.contains('hidden') === false) return;
     if (paused) {
@@ -982,12 +1057,16 @@ async function main() {
       requestPointer();
       return;
     }
+    // If a math prompt is open, ignore clicks until it resolves
+    if (mathPrompt.active) return;
     if (!pointerLocked) {
       requestPointer();
       return;
     }
-    handleClick(e.button);
+    if (e.button === 0) startMining();
+    else if (e.button === 2) handleClick(2);
   });
+  // No mouseup handler — a single click opens the math prompt; user types to mine
 
   // Mouse look
   document.addEventListener('mousemove', (e) => {
@@ -1001,6 +1080,11 @@ async function main() {
 
   // Keyboard
   document.addEventListener('keydown', (e) => {
+    // If math prompt is active, the input element handles its own keys.
+    // Don't let any key affect the game (no movement registers, no F3, etc.)
+    if (mathPrompt && mathPrompt.active) {
+      return;
+    }
     if (e.key === 'Escape') {
       if (!startScreen.classList.contains('hidden')) return;
       paused = true;
@@ -1027,6 +1111,7 @@ async function main() {
     keys.add(e.code);
   });
   document.addEventListener('keyup', (e) => {
+    if (mathPrompt && mathPrompt.active) return;
     keys.delete(e.code);
   });
   document.addEventListener('wheel', (e) => {
@@ -1043,22 +1128,229 @@ async function main() {
     camera.updateProjectionMatrix();
   });
 
-  // Block break/place
+  // ---- Math prompt controller ----
+  const mpEl = document.getElementById('math-prompt');
+  const mpQ = document.getElementById('mp-question');
+  const mpInput = document.getElementById('mp-input');
+  const mpBar = document.getElementById('mp-bar-fill');
+  const mpHint = document.getElementById('mp-hint');
+  const feedbackEl = document.getElementById('feedback-toast');
+  const xpEl = document.getElementById('xp-value');
+  const streakEl = document.getElementById('streak-value');
+  const scoreBadge = document.getElementById('score-badge');
+
+  const mathPrompt = {
+    active: false,
+    reason: null,        // 'mining'
+    target: null,        // {x,y,z} block coords
+    answer: null,
+    timeLimit: 0,
+    timeLeft: 0,
+    xpReward: 0,
+    rafId: null,
+    onResolve: null,
+
+    open(challenge, target, onResolve) {
+      this.active = true;
+      this.reason = 'mining';
+      this.target = target;
+      this.answer = challenge.answer;
+      this.timeLimit = challenge.time;
+      this.timeLeft = challenge.time;
+      this.xpReward = challenge.xp;
+      this.onResolve = onResolve;
+
+      mpQ.textContent = `${challenge.text} = ?`;
+      mpInput.value = '';
+      mpInput.classList.remove('shake');
+      mpBar.style.width = '100%';
+      mpBar.classList.remove('warn', 'danger');
+      mpHint.textContent = `Mining · ${challenge.tier.toUpperCase()} · +${challenge.xp} XP`;
+      mpEl.classList.remove('hidden');
+
+      // Clear any held movement keys so the player doesn't drift while the kid types
+      keys.clear();
+      // Release pointer lock so the user can type, but DON'T pause the game.
+      if (document.pointerLockElement) document.exitPointerLock();
+      // Defer focus to after lock releases so the input gets keyboard
+      setTimeout(() => mpInput.focus(), 30);
+
+      this._tickStart = performance.now();
+      this._tick();
+    },
+
+    _tick() {
+      if (!this.active) return;
+      const now = performance.now();
+      const elapsed = (now - this._tickStart) / 1000;
+      this.timeLeft = Math.max(0, this.timeLimit - elapsed);
+      const pct = (this.timeLeft / this.timeLimit) * 100;
+      mpBar.style.width = pct + '%';
+      if (pct < 30) mpBar.classList.add('danger');
+      else if (pct < 55) { mpBar.classList.add('warn'); mpBar.classList.remove('danger'); }
+      if (this.timeLeft <= 0) {
+        this.resolve(false, 'timeout');
+        return;
+      }
+      this.rafId = requestAnimationFrame(() => this._tick());
+    },
+
+    submit() {
+      if (!this.active) return;
+      const v = parseInt(mpInput.value.trim(), 10);
+      if (isNaN(v)) return;
+      if (v === this.answer) {
+        this.resolve(true, 'correct');
+      } else {
+        // wrong attempt: shake and clear, but keep prompt open
+        mpInput.classList.remove('shake');
+        // force reflow so animation re-triggers
+        void mpInput.offsetWidth;
+        mpInput.classList.add('shake');
+        mpInput.value = '';
+        playSfx('wrong');
+      }
+    },
+
+    cancel(reason) { this.resolve(false, reason || 'cancel'); },
+
+    resolve(success, reason) {
+      if (!this.active) return;
+      this.active = false;
+      if (this.rafId) cancelAnimationFrame(this.rafId);
+      mpEl.classList.add('hidden');
+      const cb = this.onResolve;
+      this.onResolve = null;
+      const ctx = { target: this.target, xp: this.xpReward, reason };
+      // Re-grab pointer lock for play
+      requestPointer();
+      if (cb) cb(success, ctx);
+    },
+  };
+
+  // Math prompt input handlers
+  mpInput.addEventListener('keydown', (e) => {
+    if (!mathPrompt.active) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      mathPrompt.submit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      mathPrompt.cancel('escape');
+    }
+    // Block keystrokes from leaking to game movement while typing
+    e.stopPropagation();
+  }, true);
+  mpInput.addEventListener('input', () => {
+    // restrict to digits and an optional leading minus
+    const cleaned = mpInput.value.replace(/[^0-9-]/g, '').replace(/(?!^)-/g, '');
+    if (cleaned !== mpInput.value) mpInput.value = cleaned;
+  });
+
+  // ---- Score / XP ----
+  const score = { xp: 0, streak: 0, blocksMined: 0 };
+  function awardXP(base, ctxXP) {
+    score.streak += 1;
+    const mult = 1 + Math.min(score.streak - 1, 9) * 0.1; // up to 1.9x at streak 10
+    const gained = Math.round(base * mult);
+    score.xp += gained;
+    score.blocksMined += 1;
+    xpEl.textContent = String(score.xp);
+    streakEl.textContent = score.streak >= 2 ? `×${score.streak}` : '';
+    scoreBadge.classList.remove('bump');
+    void scoreBadge.offsetWidth;
+    scoreBadge.classList.add('bump');
+    showFeedback(`+${gained} XP`, true);
+    return gained;
+  }
+  function breakStreak() {
+    if (score.streak > 0) {
+      score.streak = 0;
+      streakEl.textContent = '';
+    }
+  }
+  function showFeedback(text, good) {
+    feedbackEl.textContent = text;
+    feedbackEl.classList.remove('hidden', 'good', 'bad');
+    feedbackEl.classList.add(good ? 'good' : 'bad');
+    // restart animation
+    void feedbackEl.offsetWidth;
+    feedbackEl.style.animation = 'none';
+    void feedbackEl.offsetWidth;
+    feedbackEl.style.animation = '';
+    setTimeout(() => feedbackEl.classList.add('hidden'), 700);
+  }
+
+  // ---- SFX (procedural) ----
+  let sfxCtx = null;
+  function playSfx(kind) {
+    try {
+      if (!sfxCtx) sfxCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = sfxCtx;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain).connect(ctx.destination);
+      let freq = 440, dur = 0.12, type = 'square';
+      if (kind === 'correct') { freq = 660; dur = 0.18; }
+      else if (kind === 'break') { freq = 220; dur = 0.16; type = 'triangle'; }
+      else if (kind === 'wrong') { freq = 140; dur = 0.18; type = 'sawtooth'; }
+      else if (kind === 'place') { freq = 380; dur = 0.08; }
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      if (kind === 'correct') osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      osc.start(now);
+      osc.stop(now + dur + 0.02);
+    } catch (e) {}
+  }
+
+  // ---- Mining: hold left-click on a block to spawn a math challenge ----
+  function startMining() {
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const r = raycastVoxel(world, camera.position, dir, REACH);
+    if (!r.hit) return;
+    const id = world.getBlock(r.x, r.y, r.z);
+    if (id === B.AIR) return;
+
+    const challenge = getMiningChallenge(id);
+    const target = { x: r.x, y: r.y, z: r.z, blockId: id };
+
+    mathPrompt.open(challenge, target, (ok, ctx) => {
+      if (ok) {
+        // Confirm the targeted block hasn't changed (player or world disturbed it)
+        const stillThere = world.getBlock(target.x, target.y, target.z) === target.blockId;
+        if (stillThere) {
+          world.setBlock(target.x, target.y, target.z, B.AIR);
+          awardXP(ctx.xp, ctx);
+          playSfx('correct');
+          playSfx('break');
+        }
+      } else {
+        // Wrong / timeout / cancel — break streak
+        if (ctx.reason === 'timeout') {
+          showFeedback('TIME!', false);
+          breakStreak();
+        } else if (ctx.reason !== 'escape' && ctx.reason !== 'cancel') {
+          breakStreak();
+        }
+      }
+    });
+  }
+
+  // Right-click placement is unchanged — instant
   function handleClick(button) {
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
     const origin = camera.position.clone();
     const r = raycastVoxel(world, origin, dir, REACH);
     if (!r.hit) return;
-    if (button === 0) {
-      // break
-      world.setBlock(r.x, r.y, r.z, B.AIR);
-    } else if (button === 2) {
-      // place
+    if (button === 2) {
       const px = r.x + r.face[0];
       const py = r.y + r.face[1];
       const pz = r.z + r.face[2];
-      // don't place inside player
       const half = player.width / 2;
       const minX = Math.floor(player.position.x - half), maxX = Math.floor(player.position.x + half);
       const minY = Math.floor(player.position.y), maxY = Math.floor(player.position.y + PLAYER_HEIGHT - 0.001);
@@ -1066,6 +1358,7 @@ async function main() {
       if (px >= minX && px <= maxX && py >= minY && py <= maxY && pz >= minZ && pz <= maxZ) return;
       if (world.getBlock(px, py, pz) !== B.AIR) return;
       world.setBlock(px, py, pz, HOTBAR[activeSlot]);
+      playSfx('place');
     }
   }
 
@@ -1089,6 +1382,18 @@ async function main() {
 
   function update(dt) {
     if (paused) return;
+    // Freeze player physics while the kid is solving a math prompt
+    if (mathPrompt && mathPrompt.active) {
+      // Still remesh + stream chunks so the world stays responsive
+      world.ensureChunksAround(player.position.x, player.position.z, RENDER_DISTANCE);
+      world.remeshDirty(2);
+      // Keep highlight visible on target block
+      if (mathPrompt.target) {
+        highlight.visible = true;
+        highlight.position.set(mathPrompt.target.x + 0.5, mathPrompt.target.y + 0.5, mathPrompt.target.z + 0.5);
+      }
+      return;
+    }
 
     // Movement input
     const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));

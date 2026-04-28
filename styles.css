@@ -267,7 +267,149 @@ canvas { display: block; }
   z-index: 20;
 }
 
+/* ------- Math prompt ------- */
+#math-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 110px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  width: min(440px, 92vw);
+  z-index: 12;
+}
+#math-prompt.hidden { display: none; }
+.mp-card {
+  background: rgba(10, 12, 16, 0.92);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  padding: 14px 18px 12px;
+  text-align: center;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.mp-question {
+  font-family: var(--font-display);
+  font-size: 40px;
+  letter-spacing: 3px;
+  color: var(--color-accent);
+  line-height: 1;
+  text-shadow: 2px 2px 0 #1c2127;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+#mp-input {
+  width: 100%;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 32px;
+  letter-spacing: 4px;
+  background: rgba(255,255,255,0.06);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: white;
+  padding: 6px 10px;
+  outline: none;
+  caret-color: var(--color-accent);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+#mp-input:focus { border-color: var(--color-accent); }
+#mp-input.shake {
+  animation: shake 320ms ease;
+  border-color: #ff5566;
+  background: rgba(255, 60, 80, 0.18);
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.mp-bar {
+  margin-top: 10px;
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#mp-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, var(--color-accent), #8fd14f);
+  transition: width 100ms linear, background 200ms ease;
+}
+#mp-bar-fill.warn { background: linear-gradient(90deg, #ffb84a, #ff7a2a); }
+#mp-bar-fill.danger { background: linear-gradient(90deg, #ff5566, #ff2238); }
+.mp-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--color-muted);
+  letter-spacing: 0.5px;
+}
+
+/* ------- XP / score badge ------- */
+#score-badge {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(10, 12, 16, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  font-family: var(--font-display);
+  letter-spacing: 1.5px;
+  color: var(--color-text);
+  text-shadow: 1px 1px 0 #000;
+}
+.sb-label { color: var(--color-muted); font-size: 14px; }
+.sb-value {
+  font-size: 22px;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+.sb-streak {
+  font-size: 14px;
+  color: #ffb84a;
+  margin-left: 6px;
+}
+.sb-streak:empty { display: none; }
+
+#score-badge.bump { animation: bump 360ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+/* ------- Feedback toast ------- */
+#feedback-toast {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: 56px;
+  letter-spacing: 4px;
+  pointer-events: none;
+  text-shadow: 3px 3px 0 #1c2127, 6px 6px 24px rgba(0,0,0,0.5);
+  z-index: 14;
+}
+#feedback-toast.hidden { display: none; }
+#feedback-toast.good { color: #b6f04a; animation: popUp 700ms ease-out; }
+#feedback-toast.bad { color: #ff5566; animation: popUp 700ms ease-out; }
+@keyframes popUp {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  60% { opacity: 1; transform: translate(-50%, -55%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -70%) scale(1); }
+}
+
 @media (max-width: 600px) {
   .controls { grid-template-columns: 1fr; max-width: 320px; }
   .logo { font-size: 64px; }
+  .mp-question { font-size: 32px; }
+  #mp-input { font-size: 26px; }
+  #math-prompt { bottom: 100px; }
 }

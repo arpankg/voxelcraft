@@ -14,14 +14,14 @@
   <div id="start-screen" class="overlay">
     <div class="start-card">
       <h1 class="logo">VOXELCRAFT</h1>
-      <p class="tagline">A browser block-building sandbox</p>
+      <p class="tagline">A block-building sandbox — mine blocks by solving fast math.</p>
 
       <div class="controls">
         <div class="ctrl-row"><span class="key">W A S D</span><span class="lbl">Move</span></div>
         <div class="ctrl-row"><span class="key">Mouse</span><span class="lbl">Look around</span></div>
         <div class="ctrl-row"><span class="key">Space</span><span class="lbl">Jump</span></div>
         <div class="ctrl-row"><span class="key">Shift</span><span class="lbl">Sprint</span></div>
-        <div class="ctrl-row"><span class="key">Left Click</span><span class="lbl">Break block</span></div>
+        <div class="ctrl-row"><span class="key">Left Click</span><span class="lbl">Mine (solve math!)</span></div>
         <div class="ctrl-row"><span class="key">Right Click</span><span class="lbl">Place block</span></div>
         <div class="ctrl-row"><span class="key">1 – 9</span><span class="lbl">Select block</span></div>
         <div class="ctrl-row"><span class="key">Scroll</span><span class="lbl">Cycle hotbar</span></div>
@@ -31,7 +31,7 @@
       </div>
 
       <button id="play-btn" class="btn">Play</button>
-      <p class="hint">Click anywhere to lock the mouse and start playing.</p>
+      <p class="hint">Click anywhere to lock the mouse. Click a block to mine — type the answer, press Enter.</p>
     </div>
   </div>
 
@@ -62,6 +62,26 @@
     <div id="hotbar"></div>
 
     <div id="debug" class="hidden"></div>
+
+    <!-- XP / score badge -->
+    <div id="score-badge">
+      <span class="sb-label">XP</span>
+      <span class="sb-value" id="xp-value">0</span>
+      <span class="sb-streak" id="streak-value"></span>
+    </div>
+
+    <!-- Math prompt overlay -->
+    <div id="math-prompt" class="hidden">
+      <div class="mp-card">
+        <div class="mp-question" id="mp-question">2 + 3 = ?</div>
+        <input id="mp-input" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" spellcheck="false" />
+        <div class="mp-bar"><div id="mp-bar-fill"></div></div>
+        <div class="mp-hint" id="mp-hint">Type the answer · Enter to mine · Esc to cancel</div>
+      </div>
+    </div>
+
+    <!-- Floating answer feedback toast -->
+    <div id="feedback-toast" class="hidden"></div>
   </div>
 
   <!-- Game canvas mount -->

@@ -126,7 +126,29 @@ function getMiningChallenge(blockId) {
   const d = MINING_DIFFICULTY[blockId] || { tier: 'med', gen: Q_GEN.addMed };
   const tier = MATH_TIERS[d.tier];
   const q = d.gen();
-  return { tier: d.tier, time: tier.time, xp: tier.xp, ...q };
+  return { mode: 'mining', tier: d.tier, time: tier.time, xp: tier.xp, ...q };
+}
+
+// Block-id → difficulty descriptor for placement (mirrors mining; XP slightly lower since placing is creative not extractive)
+const PLACEMENT_DIFFICULTY = {
+  [B.LEAVES]: { tier: 'easy', gen: Q_GEN.addSmall },
+  [B.SAND]:   { tier: 'easy', gen: Q_GEN.addSmall },
+  [B.SNOW]:   { tier: 'easy', gen: Q_GEN.mixedEasy },
+  [B.GRASS]:  { tier: 'med',  gen: Q_GEN.mixedEasy },
+  [B.DIRT]:   { tier: 'med',  gen: Q_GEN.mixedEasy },
+  [B.WOOD]:   { tier: 'med',  gen: Q_GEN.mixedMed },
+  [B.PLANKS]: { tier: 'med',  gen: Q_GEN.mixedMed },
+  [B.GLASS]:  { tier: 'hard', gen: Q_GEN.multSmall },
+  [B.BRICK]:  { tier: 'hard', gen: Q_GEN.multSmall },
+  [B.STONE]:  { tier: 'hard', gen: Q_GEN.mixedHard },
+  [B.COBBLE]: { tier: 'hard', gen: Q_GEN.mixedHard },
+};
+const PLACE_XP = { easy: 3, med: 6, hard: 10, pro: 16 };
+function getPlacementChallenge(blockId) {
+  const d = PLACEMENT_DIFFICULTY[blockId] || { tier: 'med', gen: Q_GEN.addMed };
+  const tier = MATH_TIERS[d.tier];
+  const q = d.gen();
+  return { mode: 'placing', tier: d.tier, time: tier.time, xp: PLACE_XP[d.tier] ?? tier.xp, ...q };
 }
 
 // ---------- Procedural pixel-art texture atlas ----------
@@ -1064,7 +1086,7 @@ async function main() {
       return;
     }
     if (e.button === 0) startMining();
-    else if (e.button === 2) handleClick(2);
+    else if (e.button === 2) startPlacing();
   });
   // No mouseup handler — a single click opens the math prompt; user types to mine
 
@@ -1152,7 +1174,7 @@ async function main() {
 
     open(challenge, target, onResolve) {
       this.active = true;
-      this.reason = 'mining';
+      this.reason = challenge.mode || 'mining';
       this.target = target;
       this.answer = challenge.answer;
       this.timeLimit = challenge.time;
@@ -1165,7 +1187,8 @@ async function main() {
       mpInput.classList.remove('shake');
       mpBar.style.width = '100%';
       mpBar.classList.remove('warn', 'danger');
-      mpHint.textContent = `Mining · ${challenge.tier.toUpperCase()} · +${challenge.xp} XP`;
+      const verb = challenge.mode === 'placing' ? 'Placing' : 'Mining';
+      mpHint.textContent = `${verb} · ${challenge.tier.toUpperCase()} · +${challenge.xp} XP`;
       mpEl.classList.remove('hidden');
 
       // Clear any held movement keys so the player doesn't drift while the kid types
@@ -1340,26 +1363,57 @@ async function main() {
     });
   }
 
-  // Right-click placement is unchanged — instant
-  function handleClick(button) {
+  // Right-click placement — gated by a math prompt scaled to the block being placed
+  function startPlacing() {
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
     const origin = camera.position.clone();
     const r = raycastVoxel(world, origin, dir, REACH);
     if (!r.hit) return;
-    if (button === 2) {
-      const px = r.x + r.face[0];
-      const py = r.y + r.face[1];
-      const pz = r.z + r.face[2];
-      const half = player.width / 2;
-      const minX = Math.floor(player.position.x - half), maxX = Math.floor(player.position.x + half);
-      const minY = Math.floor(player.position.y), maxY = Math.floor(player.position.y + PLAYER_HEIGHT - 0.001);
-      const minZ = Math.floor(player.position.z - half), maxZ = Math.floor(player.position.z + half);
-      if (px >= minX && px <= maxX && py >= minY && py <= maxY && pz >= minZ && pz <= maxZ) return;
-      if (world.getBlock(px, py, pz) !== B.AIR) return;
-      world.setBlock(px, py, pz, HOTBAR[activeSlot]);
-      playSfx('place');
-    }
+
+    const px = r.x + r.face[0];
+    const py = r.y + r.face[1];
+    const pz = r.z + r.face[2];
+
+    // Validate placement up front — no point asking a math question if we can't actually place
+    const half = player.width / 2;
+    const minX = Math.floor(player.position.x - half), maxX = Math.floor(player.position.x + half);
+    const minY = Math.floor(player.position.y), maxY = Math.floor(player.position.y + PLAYER_HEIGHT - 0.001);
+    const minZ = Math.floor(player.position.z - half), maxZ = Math.floor(player.position.z + half);
+    if (px >= minX && px <= maxX && py >= minY && py <= maxY && pz >= minZ && pz <= maxZ) return;
+    if (world.getBlock(px, py, pz) !== B.AIR) return;
+
+    const blockId = HOTBAR[activeSlot];
+    if (blockId === undefined || blockId === B.AIR) return;
+
+    const challenge = getPlacementChallenge(blockId);
+    const target = { x: px, y: py, z: pz, blockId };
+
+    mathPrompt.open(challenge, target, (ok, ctx) => {
+      if (ok) {
+        // Re-validate at resolve time — player may have moved into the spot, or world changed
+        const t = ctx.target;
+        const half2 = player.width / 2;
+        const minX2 = Math.floor(player.position.x - half2), maxX2 = Math.floor(player.position.x + half2);
+        const minY2 = Math.floor(player.position.y), maxY2 = Math.floor(player.position.y + PLAYER_HEIGHT - 0.001);
+        const minZ2 = Math.floor(player.position.z - half2), maxZ2 = Math.floor(player.position.z + half2);
+        const blocksPlayer = (t.x >= minX2 && t.x <= maxX2 && t.y >= minY2 && t.y <= maxY2 && t.z >= minZ2 && t.z <= maxZ2);
+        const stillEmpty = world.getBlock(t.x, t.y, t.z) === B.AIR;
+        if (!blocksPlayer && stillEmpty) {
+          world.setBlock(t.x, t.y, t.z, t.blockId);
+          awardXP(ctx.xp, ctx);
+          playSfx('correct');
+          playSfx('place');
+        }
+      } else {
+        if (ctx.reason === 'timeout') {
+          showFeedback('TIME!', false);
+          breakStreak();
+        } else if (ctx.reason !== 'escape' && ctx.reason !== 'cancel') {
+          breakStreak();
+        }
+      }
+    });
   }
 
   // Suppress context menu so right-click can place

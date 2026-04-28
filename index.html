@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Voxelcraft — Browser Minecraft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- Title / start screen -->
+  <div id="start-screen" class="overlay">
+    <div class="start-card">
+      <h1 class="logo">VOXELCRAFT</h1>
+      <p class="tagline">A browser block-building sandbox</p>
+
+      <div class="controls">
+        <div class="ctrl-row"><span class="key">W A S D</span><span class="lbl">Move</span></div>
+        <div class="ctrl-row"><span class="key">Mouse</span><span class="lbl">Look around</span></div>
+        <div class="ctrl-row"><span class="key">Space</span><span class="lbl">Jump</span></div>
+        <div class="ctrl-row"><span class="key">Shift</span><span class="lbl">Sprint</span></div>
+        <div class="ctrl-row"><span class="key">Left Click</span><span class="lbl">Break block</span></div>
+        <div class="ctrl-row"><span class="key">Right Click</span><span class="lbl">Place block</span></div>
+        <div class="ctrl-row"><span class="key">1 – 9</span><span class="lbl">Select block</span></div>
+        <div class="ctrl-row"><span class="key">Scroll</span><span class="lbl">Cycle hotbar</span></div>
+        <div class="ctrl-row"><span class="key">F</span><span class="lbl">Toggle fly</span></div>
+        <div class="ctrl-row"><span class="key">F3</span><span class="lbl">Debug overlay</span></div>
+        <div class="ctrl-row"><span class="key">Esc</span><span class="lbl">Pause</span></div>
+      </div>
+
+      <button id="play-btn" class="btn">Play</button>
+      <p class="hint">Click anywhere to lock the mouse and start playing.</p>
+    </div>
+  </div>
+
+  <!-- Pause screen -->
+  <div id="pause-screen" class="overlay hidden">
+    <div class="start-card">
+      <h2 class="logo small">PAUSED</h2>
+      <button id="resume-btn" class="btn">Resume</button>
+    </div>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading-screen" class="overlay">
+    <div class="start-card">
+      <h2 class="logo small">GENERATING WORLD</h2>
+      <div class="loader-bar"><div id="loader-fill"></div></div>
+      <p id="loader-text" class="hint">Building chunks…</p>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="crosshair">
+      <span class="ch-h"></span>
+      <span class="ch-v"></span>
+    </div>
+
+    <div id="hotbar"></div>
+
+    <div id="debug" class="hidden"></div>
+  </div>
+
+  <!-- Game canvas mount -->
+  <div id="canvas-wrap"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://esm.sh/three@0.160.0",
+      "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
